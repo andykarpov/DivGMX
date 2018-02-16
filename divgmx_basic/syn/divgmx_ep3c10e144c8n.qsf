@@ -41,7 +41,7 @@ set_global_assignment -name DEVICE EP3C10E144C8
 set_global_assignment -name TOP_LEVEL_ENTITY basic
 set_global_assignment -name ORIGINAL_QUARTUS_VERSION "13.0 SP1.DP6"
 set_global_assignment -name PROJECT_CREATION_TIME_DATE "09:23:17  OCTOBER 27, 2016"
-set_global_assignment -name LAST_QUARTUS_VERSION "13.0 SP1.DP6"
+set_global_assignment -name LAST_QUARTUS_VERSION "13.0 SP1"
 set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
 set_global_assignment -name MIN_CORE_JUNCTION_TEMP 0
 set_global_assignment -name MAX_CORE_JUNCTION_TEMP 85
@@ -155,6 +155,7 @@ set_location_assignment PIN_89 -to USB_IO3
 set_location_assignment PIN_114 -to I2C_SDA
 set_location_assignment PIN_115 -to I2C_SCL
 
+set_global_assignment -name VHDL_FILE ../rtl/pll/sync.vhd
 set_global_assignment -name SYSTEMVERILOG_FILE ../rtl/sound/turbosound/saa1099.sv
 set_global_assignment -name VHDL_FILE ../rtl/i2c/i2c.vhd
 set_global_assignment -name VHDL_FILE ../rtl/hid/receiver.vhd
@@ -186,4 +187,5 @@ set_global_assignment -name VHDL_FILE ../rtl/osd/memory/ep3/font.vhd
 set_global_assignment -name VHDL_FILE ../rtl/osd/txt/txt.vhd
 set_global_assignment -name QIP_FILE ../rtl/pll/ep3/altpll1.qip
 set_global_assignment -name QIP_FILE ../rtl/ram/ep3/rom1.qip
+set_location_assignment PIN_49 -to BUS_CLK
 set_instance_assignment -name PARTITION_HIERARCHY root_partition -to | -section_id Top

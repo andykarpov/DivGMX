@@ -96,7 +96,7 @@ port (
 --	BUF_NNMI	: in std_logic;
 	BUF_NRESET	: in std_logic;
 	BUF_DIR		: out std_logic_vector(1 downto 0);
---	BUS_CLK		: inout std_logic;
+	BUS_CLK		: in std_logic;
 	BUS_D		: inout std_logic_vector(7 downto 0);
 	BUS_A		: inout std_logic_vector(15 downto 0);
 	BUS_NMREQ	: inout std_logic;
@@ -122,6 +122,8 @@ signal clk_bus		: std_logic;
 signal clk_sdr		: std_logic;
 signal clk_saa		: std_logic;
 signal clk_osd		: std_logic;
+signal clk_phi    : std_logic;
+signal clk_speccy : std_logic;
 
 signal sync_hsync	: std_logic;
 signal sync_vsync	: std_logic;
@@ -180,6 +182,10 @@ signal divmmc_e3reg	: std_logic_vector(7 downto 0);
 signal divmmc_ncs	: std_logic;
 signal divmmc_sclk	: std_logic;
 signal divmmc_mosi	: std_logic;
+
+signal divmmc_bank : std_logic_vector(5 downto 0);
+signal divmmc_conmem : std_logic;
+
 -- SDRAM
 signal sdr_do		: std_logic_vector(7 downto 0);
 signal sdr_wr		: std_logic;
@@ -268,6 +274,16 @@ port map (
 	c2		=> clk_sdr,	--  84.00 MHz
 	c3		=> clk_28);	--  28.00 MHz
 
+Usync: entity work.sync_with_edge_detect
+port map (
+	clock => clk_bus,
+	async_in => BUS_CLK,
+	--sync_out => clk_phi
+	sync_out => clk_speccy
+	);
+	
+--clk_speccy <= not(clk_phi);
+	
 -- HDMI
 U2: entity work.hdmi
 generic map (
@@ -364,9 +380,8 @@ port map (
 -- DIVMMC Interface
 U8: entity work.divmmc
 port map (
-	I_CLK		=> clk_bus,
-	I_SCLK		=> clk_28,
-	I_CS		=> kb_fn(6),
+	I_CLK		=> clk_speccy,
+	I_CS            => kb_fn(6),
 	I_RESET		=> not reset_n_i,
 	I_ADDR		=> a_i,
 	I_DATA		=> d_i,
@@ -377,8 +392,12 @@ port map (
 	I_MREQ_N	=> mreq_n_i,
 	I_M1_N		=> m1_n_i,
 	I_RFSH_N	=> rfsh_n_i,
+	
 	O_E3REG		=> divmmc_e3reg,
-	O_AMAP		=> divmmc_amap,
+	O_AMAP		=> divmmc_amap,	
+	O_BANK => divmmc_bank,
+	O_CONMEM => divmmc_conmem,
+
 	O_CS_N		=> divmmc_ncs,
 	O_SCLK		=> divmmc_sclk,
 	O_MOSI		=> divmmc_mosi,
@@ -557,7 +576,7 @@ port map (
 	c0		=> clk_osd,	--  40.00 MHz
 	c1		=> clk_saa,	--   8.00 MHz
 	c2		=> clk_bus);	-- 112.00 MHz
-	
+		
 U19: entity work.rom1
 port map (
 	address		=> a_i(13 downto 0),
@@ -630,10 +649,10 @@ vram_scr <= '1' when (ram_addr = "00001110") else '0';
 vram_wr  <= '1' when (mreq_n_i = '0' and wr_n_i = '0' and (ram_addr = "00001010" or ram_addr = "00001110")) else '0';
 
 -------------------------------------------------------------------------------
--- SD DIVMMC/Z-Controller/SPIFLASH
-SD_NCS	<= divmmc_ncs when kb_fn(6) = '1' else zc_ncs;
-DCLK	<= divmmc_sclk when kb_fn(6) = '1' else zc_sclk;
-ASDO	<= divmmc_mosi when kb_fn(6) = '1' else zc_mosi;
+-- SD DIVMMC
+SD_NCS <= divmmc_ncs when kb_fn(6) = '1' else zc_ncs;
+DCLK   <= divmmc_sclk when kb_fn(6) = '1' else zc_sclk;
+ASDO   <= divmmc_mosi when kb_fn(6) = '1' else zc_mosi;
 NCSO	<= '1';
 
 -------------------------------------------------------------------------------
@@ -642,12 +661,12 @@ saa_wr_n <= '0' when (iorq_n_i = '0' and wr_n_i = '0' and a_i(7 downto 0) = "111
 
 -------------------------------------------------------------------------------
 -- Регистры
-process (reset_n_i, clk_bus, a_i, port_7ffd_reg, wr_n_i, d_i, iorq_n_i, trdos)
+process (reset_n_i, clk_speccy, a_i, port_7ffd_reg, wr_n_i, d_i, iorq_n_i, trdos)
 begin
 	if (reset_n_i = '0') then
 		port_7ffd_reg <= (others => '0');
 		trdos <= '0';
-	elsif (clk_bus'event and clk_bus = '1') then
+	elsif (clk_speccy'event and clk_speccy = '1') then
 		if (iorq_n_i = '0' and wr_n_i = '0' and a_i = X"7FFD" and port_7ffd_reg(5) = '0') then port_7ffd_reg <= d_i; end if;	-- D7-D6:не используются; D5:1=запрещение расширенной памяти (48K защёлка); D4=номер страницы ПЗУ(0-BASIC128, 1-BASIC48); D3=выбор отображаемой видеостраницы(0-страница в банке 5, 1 - в банке 7); D2-D0=номер страницы ОЗУ подключенной в верхние 16 КБ памяти (с адреса #C000)
 		if (a_i(15 downto 8) = X"3D" and m1_n_i = '0' and mreq_n_i = '0') then
 			trdos <= '1';
@@ -657,9 +676,9 @@ begin
 	end if;
 end process;
 
-process (clk_bus, a_i, port_xxfe_reg, wr_n_i, d_i, iorq_n_i)
+process (clk_speccy, a_i, port_xxfe_reg, wr_n_i, d_i, iorq_n_i)
 begin
-	if (clk_bus'event and clk_bus = '1') then                  
+	if (clk_speccy'event and clk_speccy = '1') then                  
 		if (iorq_n_i = '0' and wr_n_i = '0' and a_i(7 downto 0) = X"FE") then port_xxfe_reg <= d_i; end if;	-- D7-D5=не используются; D4=бипер; D3=MIC; D2-D0=цвет бордюра
 	end if;
 end process;
@@ -667,9 +686,8 @@ end process;
 ------------------------------------------------------------------------------
 -- Селектор
 selector <=	
-		X"1" when (mreq_n_i = '0' and rd_n_i = '0' and a_i(15 downto 13) = "000" and (divmmc_amap or divmmc_e3reg(7)) /= '0' and kb_fn(6) = '1') else	-- DivMMC ESXDOS ROM #0000-#1FFF
-		X"2" when (mreq_n_i = '0' and rd_n_i = '0' and a_i(15 downto 13) = "001" and (divmmc_amap or divmmc_e3reg(7)) /= '0' and kb_fn(6) = '1') else	-- DivMMC ESXDOS RAM #2000-#3FFF
-
+		X"1" when (mreq_n_i = '0' and rd_n_i = '0' and a_i(15 downto 13) = "000" and (divmmc_amap = '1' or divmmc_conmem = '1') and kb_fn(6) = '1') else	-- DivMMC ESXDOS ROM #0000-#1FFF
+		X"2" when (mreq_n_i = '0' and rd_n_i = '0' and a_i(15 downto 13) = "001" and (divmmc_amap = '1' or divmmc_conmem = '1') and kb_fn(6) = '1') else	-- DivMMC ESXDOS RAM #2000-#3FFF
 		X"0" when (mreq_n_i = '0' and rd_n_i = '0' and a_i(15 downto 14) = "00" and kb_fn(5) = '1') else						-- ROM #0000-#3FFF
 		-- Ports
 		X"3" when (iorq_n_i = '0' and rd_n_i = '0' and a_i(7 downto 0) = X"FE" and kb_fn(7) = '1') else							-- Read port #xxFE Keyboard
@@ -687,7 +705,7 @@ selector <=
 --		X"F" when (iorq_n_i = '0' and rd_n_i = '0' and a_i(7 downto 5) = "100" and a_i(3 downto 0) = "1100") else					-- Read port I2C
 		(others => '1');
 
-process (selector, rom_do, divmmc_do, sdr_do, ssg0_do_bus, ssg1_do_bus, zc_do_bus, ms0_z, ms0_b, ms0_x, ms0_y, ms1_z, ms1_b, ms1_x, ms1_y, port_7ffd_reg, kb_do_bus)
+process (selector, rom_do, rom1_do, divmmc_do, sdr_do, ssg0_do_bus, ssg1_do_bus, zc_do_bus, ms0_z, ms0_b, ms0_x, ms0_y, ms1_z, ms1_b, ms1_x, ms1_y, port_7ffd_reg, kb_do_bus)
 begin
 	case selector is
 		when X"0" => BUS_D <= rom1_do;			-- ROM
@@ -718,14 +736,14 @@ BUF_DIR(1)	<= '0' when selector = X"F" else '1';								-- 1=данные от F
 
 
 
-mux <= ((divmmc_amap or divmmc_e3reg(7)) and kb_fn(6)) & a_i(15 downto 13);
+mux <= ((divmmc_amap or divmmc_conmem) and kb_fn(6)) & a_i(15 downto 13);
 
-process (mux, port_7ffd_reg, ram_addr, divmmc_e3reg)
+process (mux, port_7ffd_reg, ram_addr, divmmc_bank)
 begin
 	case mux is
 		when "0000"|"0001" => ram_addr <= "10000001";
 		when        "1000" => ram_addr <= "10000000";					-- ESXDOS ROM 0000-1FFF
-		when        "1001" => ram_addr <= "01" & divmmc_e3reg(5 downto 0);		-- ESXDOS RAM 2000-3FFF
+		when        "1001" => ram_addr <= "01" & divmmc_bank(5 downto 0);		-- ESXDOS RAM 2000-3FFF
 		when "0010"|"1010" => ram_addr <= "00001010";					-- Seg1 RAM 4000-5FFF
 		when "0011"|"1011" => ram_addr <= "00001011";					-- Seg1 RAM 6000-7FFF
 		when "0100"|"1100" => ram_addr <= "00000100";					-- Seg2 RAM 8000-9FFF
@@ -778,6 +796,7 @@ begin
 		reset_n_i	<= reg_reset_n_i;
 		m1_n_i		<= reg_m1_n_i;
 		rfsh_n_i	<= reg_rfsh_n_i;
+
 	end if;
 end process;
 		
