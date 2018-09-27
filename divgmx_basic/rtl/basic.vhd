@@ -230,7 +230,7 @@ signal ms1_b		: std_logic_vector(7 downto 0);
 signal kb_do_bus	: std_logic_vector(4 downto 0);
 signal kb_fn_bus	: std_logic_vector(12 downto 1);
 signal kb_fn		: std_logic_vector(12 downto 1);
-signal key		: std_logic_vector(12 downto 1) := "000000000000";
+signal key		: std_logic_vector(12 downto 1) := "000000100001"; -- osd and divmmc enabled
 
 signal ena_1_75mhz	: std_logic;
 signal clk_28		: std_logic;
@@ -277,7 +277,7 @@ port map (
 Usync: entity work.sync_with_edge_detect
 port map (
 	clock => clk_bus,
-	async_in => BUS_CLK,
+	async_in => not BUS_CLK,
 	--sync_out => clk_phi
 	sync_out => clk_speccy
 	);
